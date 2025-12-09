@@ -1,5 +1,5 @@
 /**
- * AI Service with Gemini Integration
+ * AI Service with Groq SDK Integration
  * Provides intelligent conversation, context understanding, and field extraction
  */
 import { TripChecklist, ConversationMessage } from './types/checklist.js';
@@ -7,6 +7,7 @@ interface AIResponse {
     message: string;
     extractedFields: Partial<TripChecklist>;
     nextAction: 'ask_question' | 'generate_itinerary' | 'refine_preferences' | 'clarify';
+    nextField?: keyof TripChecklist;
     confidence: number;
     reasoning: string;
 }
@@ -15,9 +16,10 @@ interface ConversationContext {
     currentChecklist: Partial<TripChecklist>;
     completenessPercentage: number;
     missingFields: string[];
+    itineraryGenerated?: boolean;
 }
 /**
- * Call Gemini API for intelligent conversation
+ * Call Groq API for intelligent conversation
  */
 export declare function getAIResponse(userMessage: string, context: ConversationContext): Promise<AIResponse>;
 /**

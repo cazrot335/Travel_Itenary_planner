@@ -25,6 +25,19 @@ export const CHECKLIST_FIELDS = [
     'avoidPlaces',
     'visitedPlaces'
 ];
+/**
+ * Critical fields needed for itinerary generation
+ */
+export const CRITICAL_FIELDS = [
+    'startDate',
+    'endDate',
+    'travelDays',
+    'totalBudget',
+    'startingCity',
+    'groupType',
+    'stayPreference',
+    'schedulePreference'
+];
 export const PRIORITY_QUESTIONS = [
     'startingCity',
     'totalBudget',
@@ -73,6 +86,9 @@ export function createEmptyChecklist() {
  * Calculate checklist completeness
  */
 export function calculateCompleteness(checklist) {
-    const filled = Object.values(checklist).filter(v => v !== null && v !== undefined && v !== '' && (!Array.isArray(v) || v.length > 0)).length;
-    return Math.round((filled / CHECKLIST_FIELDS.length) * 100);
+    // Only count critical fields for completeness
+    const criticalFilled = CRITICAL_FIELDS.filter(field => checklist[field] !== null && checklist[field] !== undefined && checklist[field] !== '').length;
+    // Return percentage of critical fields filled
+    // Trigger itinerary generation at 75% of critical fields
+    return Math.round((criticalFilled / CRITICAL_FIELDS.length) * 100);
 }

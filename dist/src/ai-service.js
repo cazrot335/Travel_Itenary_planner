@@ -1,60 +1,76 @@
 /**
- * AI Service with Gemini Integration
+ * AI Service with Groq SDK Integration
  * Provides intelligent conversation, context understanding, and field extraction
  */
+import Groq from 'groq-sdk';
+const PRIORITY_QUESTIONS = [
+    'startingCity',
+    'totalBudget',
+    'groupType',
+    'tripTheme',
+    'startDate',
+    'travelDays',
+    'transportMode',
+    'stayPreference',
+    'adventureLevel',
+    'foodPreference',
+    'schedulePreference',
+    'comfortLevel',
+    'weatherPreference',
+    'safetyNeeds',
+    'specialRequirements',
+    'avoidPlaces',
+    'visitedPlaces'
+];
 /**
- * Call Gemini API for intelligent conversation
+ * Call Groq API for intelligent conversation
  */
 export async function getAIResponse(userMessage, context) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    // If no API key, return mock response
-    if (!apiKey) {
-        console.log('[AI] No API key, using mock response');
-        return getMockAIResponse(userMessage, context);
-    }
-    try {
-        const prompt = buildPrompt(userMessage, context);
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                contents: [{
-                        parts: [{
-                                text: prompt
-                            }]
-                    }],
-                generationConfig: {
-                    temperature: 0.7,
-                    topK: 40,
-                    topP: 0.95,
-                    maxOutputTokens: 1024
-                }
-            })
-        });
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('[AI] Gemini API error:', response.status, errorText);
-            return getMockAIResponse(userMessage, context);
+    const groqKey = process.env.GROQ_API_KEY;
+    // Use Groq if available
+    if (groqKey) {
+        try {
+            return await getGroqResponse(userMessage, context, groqKey);
         }
-        const data = await response.json();
-        const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        catch (error) {
+            console.error('[AI] Groq failed:', error instanceof Error ? error.message : error);
+            console.log('[AI] Falling back to mock response');
+        }
+    }
+    // Fallback to smart mock
+    return getMockAIResponse(userMessage, context);
+}
+/**
+ * Call Groq API using SDK
+ */
+async function getGroqResponse(userMessage, context, apiKey) {
+    const groq = new Groq({ apiKey });
+    const prompt = buildPrompt(userMessage, context);
+    try {
+        const response = await groq.chat.completions.create({
+            model: 'llama-3.3-70b-versatile',
+            messages: [{
+                    role: 'user',
+                    content: prompt
+                }],
+            temperature: 0.7,
+            max_tokens: 512,
+            top_p: 0.9
+        });
+        const aiText = response.choices[0]?.message?.content || '';
         if (!aiText) {
-            console.warn('[AI] Empty response from Gemini, using mock');
-            return getMockAIResponse(userMessage, context);
+            throw new Error('Empty response from Groq');
         }
         const parsed = parseAIResponse(aiText);
-        console.log('[AI] Gemini response:', parsed.message.substring(0, 100));
+        console.log('[AI] Groq response received');
         return parsed;
     }
     catch (error) {
-        console.error('[AI] Service error:', error instanceof Error ? error.message : error);
-        return getMockAIResponse(userMessage, context);
+        throw new Error(`Groq SDK error: ${error instanceof Error ? error.message : error}`);
     }
 }
 /**
- * Build prompt for Gemini to understand travel planning context
+ * Build prompt for Groq to understand travel planning context
  */
 function buildPrompt(userMessage, context) {
     const recentHistory = context.recentMessages
@@ -65,28 +81,66 @@ function buildPrompt(userMessage, context) {
         .filter(([_, v]) => v !== null && v !== undefined)
         .map(([k, v]) => `- ${k}: ${v}`)
         .join('\n');
-    return `You are a travel planning chatbot. Respond ONLY with valid JSON.
+    const missing = context.missingFields.join(', ') || 'none';
+    return `You are a casual, friendly travel planning assistant for trips like Goa weekends.
+Keep responses SHORT and natural (max 2 sentences).
 
-CONTEXT:
-- Completeness: ${context.completenessPercentage}%
-- Missing: ${context.missingFields.join(', ') || 'None'}
+Conversation so far:
+${recentHistory || '(no previous messages)'}
 
-USER: "${userMessage}"
+Current Trip Details:
+${checklist || 'Nothing collected yet'}
 
-RULES:
-1. If completeness >= 70%, set nextAction to "generate_itinerary"
-2. Otherwise, set nextAction to "ask_question"
-3. Keep message SHORT (1-2 sentences)
-4. Extract any travel details user mentioned
-5. Return VALID JSON ONLY - no other text
+Missing Fields (in priority order):
+${missing}
 
-RESPOND WITH THIS JSON EXACTLY:
+The user just said:
+"${userMessage}"
+
+CHECKLIST FIELDS:
+- startDate, endDate, travelDays
+- totalBudget
+- startingCity
+- tripTheme (adventure, relaxed, foodie, cultural, beach, mountain)
+- groupType (solo, couple, family, team)
+- transportMode (car, train, bus, flight, bike, walk, cycling)
+- stayPreference (budget, midrange, luxury, homestay, hostel)
+- adventureLevel (low, moderate, high)
+- foodPreference (vegetarian, vegan, non-vegetarian, any)
+- comfortLevel (budget, standard, premium)
+- schedulePreference (relaxed, busy, flexible, packed)
+- weatherPreference (cold, hot, rainy, monsoon, sunny, mild)
+- safetyNeeds, specialRequirements
+- avoidPlaces (array of strings)
+- visitedPlaces (array of strings)
+
+Instructions:
+1. From the user's latest message, extract as many of the above fields as you can confidently infer.
+2. Choose EXACTLY ONE missing field that is most important to ask about next (from the Missing Fields list).
+3. Write a friendly message that:
+   - acknowledges what they said in 1–2 words ("Got it!", "Nice!", "Cool!")
+   - then asks ONE clear, natural question about that chosen field only.
+4. Do NOT repeat a field that already has a value in Current Trip Details.
+5. If all CRITICAL fields are filled:
+   - CRITICAL = startDate, travelDays or endDate, totalBudget, startingCity, groupType, tripTheme, stayPreference
+   - then set "nextAction" to "generate_itinerary" instead of "ask_question" and you may skip asking a new question.
+
+Return VALID JSON ONLY in this exact shape:
 {
-  "message": "Your response here",
-  "extractedFields": {},
-  "nextAction": "ask_question|generate_itinerary",
-  "confidence": 0.8,
-  "reasoning": "Your reasoning"
+  "message": "Got it! [one natural question or a short confirmation if generating itinerary]",
+  "extractedFields": {
+    "startDate": "2025-12-12",
+    "endDate": "2025-12-14",
+    "travelDays": 3,
+    "totalBudget": 15000,
+    "groupType": "team",
+    "tripTheme": "adventure",
+    "stayPreference": "hostel"
+  },
+  "nextField": "schedulePreference",
+  "nextAction": "ask_question",
+  "confidence": 0.9,
+  "reasoning": "brief reason of what was extracted and why this field is next"
 }`;
 }
 /**
@@ -103,6 +157,7 @@ function parseAIResponse(aiText) {
             message: parsed.message || 'Got it!',
             extractedFields: parsed.extractedFields || {},
             nextAction: parsed.nextAction || 'ask_question',
+            nextField: parsed.nextField, // <- pass through
             confidence: parsed.confidence || 0.8,
             reasoning: parsed.reasoning || ''
         };
@@ -117,45 +172,96 @@ function parseAIResponse(aiText) {
  * Provides intelligent defaults based on context
  */
 function getMockAIResponse(userMessage, context) {
-    const lower = userMessage.toLowerCase();
-    const missing = context.missingFields[0];
-    // Smart fallbacks based on what's missing
-    let message = 'Thanks for that info! ';
-    let nextQuestion = 'dates';
-    if (context.completenessPercentage >= 70) {
+    // If itinerary already generated, don't ask more questions
+    if (context.itineraryGenerated) {
         return {
-            message: '🎉 I have enough info! Generating your personalized itinerary now...',
+            message: 'Your itinerary is ready! Feel free to ask me for modifications or additional details about any part of your trip.',
+            extractedFields: {},
+            nextAction: 'ask_question',
+            confidence: 0.9,
+            reasoning: 'Itinerary already generated, providing support message'
+        };
+    }
+    // Enough info? ask to generate (75% of critical fields)
+    if (context.completenessPercentage >= 75) {
+        return {
+            message: 'Perfect! Let me create your itinerary now.',
             extractedFields: {},
             nextAction: 'generate_itinerary',
             confidence: 0.95,
-            reasoning: 'Sufficient data collected for itinerary generation at 70% completeness'
+            reasoning: 'Sufficient data at 75% completeness'
         };
     }
-    // Smart question selection based on missing fields
-    if (missing === 'startDate' || missing === 'endDate') {
-        message += 'When are you thinking of traveling? Give me dates or duration.';
-    }
-    else if (missing === 'groupType') {
-        message += 'Are you traveling solo, with partner, family, or a team?';
-    }
-    else if (missing === 'transportMode') {
-        message += 'How do you prefer to travel - flight, train, car, bus, or bike?';
-    }
-    else if (missing === 'stayPreference') {
-        message += 'What\'s your accommodation preference - budget hostels, mid-range hotels, or luxury resorts?';
-    }
-    else if (missing === 'tripTheme') {
-        message += 'What kind of trip appeals to you - adventure, relaxation, food & culture, beaches, or something else?';
-    }
-    else {
-        message += `Tell me more about your ${missing?.replace(/([A-Z])/g, ' $1').toLowerCase()} preference.`;
+    const current = context.currentChecklist || {};
+    // Walk priority list in order and pick first missing field
+    const nextField = PRIORITY_QUESTIONS.find(field => {
+        const value = current[field];
+        return value === null || value === undefined || (Array.isArray(value) && value.length === 0);
+    });
+    let nextQuestion;
+    switch (nextField) {
+        case 'startingCity':
+            nextQuestion = 'Which city are you starting from?';
+            break;
+        case 'totalBudget':
+            nextQuestion = 'What\'s your total budget for this trip (approx in INR)?';
+            break;
+        case 'groupType':
+            nextQuestion = 'Who are you traveling with – solo, a partner, family, or friends/team?';
+            break;
+        case 'tripTheme':
+            nextQuestion = 'What kind of vibe are you looking for – adventure, relaxed, beach, nightlife, or mixed?';
+            break;
+        case 'startDate':
+            nextQuestion = 'On which date are you planning to start the trip?';
+            break;
+        case 'travelDays':
+            nextQuestion = 'How many days do you want to travel?';
+            break;
+        case 'transportMode':
+            nextQuestion = 'What transport do you prefer – car, bus, train, flight, or bike?';
+            break;
+        case 'stayPreference':
+            nextQuestion = 'What kind of stay are you looking for – hostel, budget hotel, homestay, or luxury?';
+            break;
+        case 'adventureLevel':
+            nextQuestion = 'What\'s your adventure level – low, moderate, or high?';
+            break;
+        case 'foodPreference':
+            nextQuestion = 'Any food preference – veg, non-veg, seafood, or anything?';
+            break;
+        case 'schedulePreference':
+            nextQuestion = 'Do you want a relaxed schedule or a packed day-by-day plan?';
+            break;
+        case 'comfortLevel':
+            nextQuestion = 'Comfort level – budget, standard, or premium?';
+            break;
+        case 'weatherPreference':
+            nextQuestion = 'Any weather preference – sunny, cool, or something specific?';
+            break;
+        case 'safetyNeeds':
+            nextQuestion = 'Any safety or health needs I should keep in mind?';
+            break;
+        case 'specialRequirements':
+            nextQuestion = 'Any special requirements – kids, elders, pets, accessibility?';
+            break;
+        case 'avoidPlaces':
+            nextQuestion = 'Anything you definitely want to avoid – crowded spots, pubs, long treks?';
+            break;
+        case 'visitedPlaces':
+            nextQuestion = 'Any places in Goa you\'ve already visited and want to skip this time?';
+            break;
+        default:
+            nextQuestion = 'Anything else important for this trip that I should know?';
     }
     return {
-        message,
+        message: `Got it! ${nextQuestion}`,
         extractedFields: {},
         nextAction: 'ask_question',
-        confidence: 0.7,
-        reasoning: `Smart fallback: Asking about missing field - ${missing}`
+        confidence: 0.85,
+        reasoning: nextField
+            ? `Asking for next missing field: ${nextField}`
+            : 'No critical fields missing, asking open follow-up'
     };
 }
 /**

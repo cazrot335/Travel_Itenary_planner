@@ -11,7 +11,7 @@ import {
   createEmptyChecklist,
   calculateCompleteness
 } from './../types/checklist.js';
-import { parseMessage } from '../nlp-parser.js';
+import { parseMessage } from '../nlp-parser-chrono.js';
 import {
   saveSessionToSmartMemory,
   loadSessionFromSmartMemory,
@@ -75,16 +75,18 @@ export async function chat(sessionId: string, userMessage: string): Promise<Chat
   // Load or initialize session
   let session = await initializeSession(sessionId);
 
-  // Get AI response with context understanding
+  // Extract fields FIRST using both NLP and AI
+  const nlpExtracted = parseMessage(userMessage);
+
+  // Get AI response with CURRENT context (before updating)
   const aiResponse = await getAIResponse(userMessage, {
     recentMessages: session.history.slice(-6),
     currentChecklist: session.checklist,
     completenessPercentage: calculateCompleteness(session.checklist),
-    missingFields: predictNextFields(session.history, session.checklist)
+    missingFields: predictNextFields(session.history, session.checklist),
+    itineraryGenerated: session.itineraryGenerated
   });
 
-  // Extract fields using both NLP and AI
-  const nlpExtracted = parseMessage(userMessage);
   const aiExtracted = aiResponse.extractedFields;
 
   // Merge extractions
@@ -109,8 +111,13 @@ export async function chat(sessionId: string, userMessage: string): Promise<Chat
     session.checklist = refineChecklistWithAI(session.checklist, merged);
   }
 
-  // Calculate completeness
+  // Calculate completeness AFTER updating fields
   const completeness = calculateCompleteness(session.checklist);
+
+  // IF completeness >= 70%, force itinerary generation
+  if (completeness >= 70) {
+    aiResponse.nextAction = 'generate_itinerary';
+  }
 
   // Add user message to history
   const userMsg: ConversationMessage = {
@@ -130,6 +137,7 @@ export async function chat(sessionId: string, userMessage: string): Promise<Chat
   if (completeness >= 70 && aiResponse.nextAction === 'generate_itinerary') {
     itinerary = await generateItinerary(sessionId, session.checklist);
     assistantContent = `🎉 Perfect! I have enough info to create your itinerary!\n\n${assistantContent}`;
+    session.itineraryGenerated = true; // Mark itinerary as generated
   }
 
   // Add assistant response to history

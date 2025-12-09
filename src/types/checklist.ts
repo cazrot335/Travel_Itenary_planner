@@ -63,6 +63,7 @@ export interface ChatSession {
   updatedAt: string;
   completeness: number;
   aiEnhancedQuestion?: string;
+  itineraryGenerated?: boolean;
 }
 
 /**
@@ -294,6 +295,20 @@ export const CHECKLIST_FIELDS: (keyof TripChecklist)[] = [
   'visitedPlaces'
 ];
 
+/**
+ * Critical fields needed for itinerary generation
+ */
+export const CRITICAL_FIELDS: (keyof TripChecklist)[] = [
+  'startDate',
+  'endDate',
+  'travelDays',
+  'totalBudget',
+  'startingCity',
+  'groupType',
+  'stayPreference',
+  'schedulePreference'
+];
+
 export const PRIORITY_QUESTIONS: (keyof TripChecklist)[] = [
   'startingCity',
   'totalBudget',
@@ -344,8 +359,12 @@ export function createEmptyChecklist(): TripChecklist {
  * Calculate checklist completeness
  */
 export function calculateCompleteness(checklist: TripChecklist): number {
-  const filled = Object.values(checklist).filter(
-    v => v !== null && v !== undefined && v !== '' && (!Array.isArray(v) || v.length > 0)
+  // Only count critical fields for completeness
+  const criticalFilled = CRITICAL_FIELDS.filter(
+    field => checklist[field] !== null && checklist[field] !== undefined && checklist[field] !== ''
   ).length;
-  return Math.round((filled / CHECKLIST_FIELDS.length) * 100);
+  
+  // Return percentage of critical fields filled
+  // Trigger itinerary generation at 75% of critical fields
+  return Math.round((criticalFilled / CRITICAL_FIELDS.length) * 100);
 }

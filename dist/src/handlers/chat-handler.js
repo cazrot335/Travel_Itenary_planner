@@ -184,6 +184,90 @@ app.onError((err, c) => {
     }, { status: 500 });
 });
 /**
+ * GET /api/session/:sessionId/debug - Debug session context and completeness
+ * Shows: Checklist fields, completion status, and why itinerary may/may not generate
+ */
+app.get('/api/session/:sessionId/debug', async (c) => {
+    try {
+        const sessionId = c.req.param('sessionId');
+        if (!sessionId) {
+            return c.json({ error: 'Missing sessionId' }, { status: 400 });
+        }
+        // Load session
+        const session = await initializeSession(sessionId);
+        // Critical fields for itinerary generation
+        const criticalFields = {
+            startDate: session.checklist.startDate,
+            endDate: session.checklist.endDate,
+            travelDays: session.checklist.travelDays,
+            totalBudget: session.checklist.totalBudget,
+            startingCity: session.checklist.startingCity,
+            groupType: session.checklist.groupType,
+            stayPreference: session.checklist.stayPreference
+        };
+        // All fields
+        const allFields = {
+            ...criticalFields,
+            tripTheme: session.checklist.tripTheme,
+            transportMode: session.checklist.transportMode,
+            adventureLevel: session.checklist.adventureLevel,
+            foodPreference: session.checklist.foodPreference,
+            schedulePreference: session.checklist.schedulePreference,
+            weatherPreference: session.checklist.weatherPreference,
+            safetyNeeds: session.checklist.safetyNeeds,
+            specialRequirements: session.checklist.specialRequirements,
+            comfortLevel: session.checklist.comfortLevel,
+            avoidPlaces: session.checklist.avoidPlaces,
+            visitedPlaces: session.checklist.visitedPlaces
+        };
+        // Count filled critical fields
+        const filledCritical = Object.values(criticalFields).filter(v => v !== null && v !== undefined).length;
+        const totalCritical = Object.keys(criticalFields).length;
+        const criticalPercentage = Math.round((filledCritical / totalCritical) * 100);
+        // Count filled all fields
+        const filledAll = Object.values(allFields).filter(v => v !== null && v !== undefined).length;
+        const totalAll = Object.keys(allFields).length;
+        return c.json({
+            sessionId,
+            completeness: session.completeness,
+            willGenerateItinerary: session.completeness >= 70,
+            criticalFields: {
+                filled: filledCritical,
+                total: totalCritical,
+                percentage: criticalPercentage,
+                details: criticalFields
+            },
+            allFields: {
+                filled: filledAll,
+                total: totalAll,
+                percentage: Math.round((filledAll / totalAll) * 100),
+                details: allFields
+            },
+            conversationHistory: {
+                totalMessages: session.history.length,
+                lastMessage: session.history[session.history.length - 1]?.content || 'None',
+                userMessages: session.history.filter(m => m.role === 'user').length,
+                aiMessages: session.history.filter(m => m.role === 'assistant').length
+            },
+            threshold: 'Need 70% completeness to trigger itinerary generation',
+            extractedFromLastMessages: session.history
+                .slice(-3)
+                .map(m => ({
+                role: m.role,
+                content: m.content.substring(0, 100) + '...',
+                extractedFields: m.extractedFields
+            }))
+        });
+    }
+    catch (error) {
+        console.error('[API] Debug endpoint error:', error);
+        return c.json({
+            error: 'Failed to fetch debug info',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        }, { status: 500 });
+    }
+});
+/**
  * 404 handler
  */
 app.notFound((c) => {

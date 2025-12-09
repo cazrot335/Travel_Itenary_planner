@@ -45,6 +45,7 @@ export interface ChatSession {
     updatedAt: string;
     completeness: number;
     aiEnhancedQuestion?: string;
+    itineraryGenerated?: boolean;
 }
 /**
  * Conversation message in chat history
@@ -251,6 +252,10 @@ export interface POIDocument {
  * Constants for checklist
  */
 export declare const CHECKLIST_FIELDS: (keyof TripChecklist)[];
+/**
+ * Critical fields needed for itinerary generation
+ */
+export declare const CRITICAL_FIELDS: (keyof TripChecklist)[];
 export declare const PRIORITY_QUESTIONS: (keyof TripChecklist)[];
 /**
  * Creates an empty checklist
