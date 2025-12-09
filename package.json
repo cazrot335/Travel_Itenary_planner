@@ -1,0 +1,35 @@
+{
+  "name": "itenary",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "LiquidMetal AI app",
+  "scripts": {
+    "build": "shx rm -rf dist && tsc -b",
+    "dev": "npm run build && node dist/server.js",
+    "start": "raindrop build deploy --start",
+    "start:local": "npm run build && node dist/server.js",
+    "stop": "raindrop build stop",
+    "restart": "raindrop build deploy --start",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@liquidmetal-ai/raindrop-framework": "0.12.0",
+    "@modelcontextprotocol/sdk": "^1",
+    "dotenv": "^17.2.3",
+    "hono": "^4",
+    "kysely": "^0.27.2",
+    "kysely-d1": "^0.3.0",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "shx": "^0.4.0",
+    "ts-node": "^10",
+    "typescript": "^5.0.4",
+    "typescript-eslint": "^8.7.0",
+    "vitest": "^3.1.3"
+  }
+}

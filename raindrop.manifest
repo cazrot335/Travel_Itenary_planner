@@ -1,0 +1,25 @@
+// Raindrop Manifest - Travel Itinerary Chatbot
+application "travel-itinerary" {
+
+  // Environment Variables
+  env "GEMINI_API_KEY" {
+    secret = true
+  }
+
+  // Main Chat Service
+  service "travel-chat-api" {
+    visibility = "public"
+  }
+
+  // Storage Resources
+  bucket "poi-data" {
+    visibility = "protected"
+  }
+
+  smartbucket "pois-smart" {}
+  smartmemory "session-memory" {}
+  smartmemory "trip-memory" {}
+  smartsql "smart-trips" {}
+  kv_cache "session-cache" {}
+  queue "itinerary-queue" {}
+}
